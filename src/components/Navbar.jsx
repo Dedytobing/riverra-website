@@ -8,7 +8,7 @@ export default function Navbar() {
       <div className="navbar">
         <div className="logo-group">
           <img
-            src="https://raw.githubusercontent.com/Dedytobing/riverra-website/refs/heads/main/assets/logo.png"
+            src="https://cdn.corenexis.com/f/YwiVvDmu5FM.png"
             alt="Riverra Crest"
             className="navbar-crest"
           />
