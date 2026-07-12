@@ -1,7 +1,7 @@
 ﻿import React, { useEffect, useMemo, useState } from "react";
 import "../css/admin.css";
 
-const BASE = "http://localhost:3000/api";
+const BASE = "riverra-backend.vercel.app/api";
 const API = `${BASE}/members`;
 const empty = {
   id: "",
