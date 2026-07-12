@@ -53,7 +53,7 @@ export default function Admin() {
     setNotice({ message, type });
     setTimeout(() => setNotice(null), 3500);
   };
-  useEffect(()=>{if(!user)return;const heartbeat=()=>fetch(`${BASE}/auth/heartbeat`,{method:"POST",headers:{Authorization:`Bearer ${user.token}`}}).catch(()=>{});const load=()=>fetch(`${BASE}/admins/online`,{headers:{Authorization:`Bearer ${user.token}`}}).then(r=>r.json()).then(o=>{if(o.success)setOnlineAdmins(o.data)}).catch(()=>{});heartbeat();load();const timer=setInterval(()=>{heartbeat();load()},30000);return()=>clearInterval(timer)},[user?.token]);
+  useEffect(()=>{if(!user)return;setOnlineAdmins([{id:user.id,name:user.name,role:user.level}]);const heartbeat=()=>fetch(`${BASE}/auth/heartbeat`,{method:"POST",headers:{Authorization:`Bearer ${user.token}`}});const load=()=>fetch(`${BASE}/admins/online`,{headers:{Authorization:`Bearer ${user.token}`}}).then(r=>r.json()).then(o=>{if(o.success&&Array.isArray(o.data))setOnlineAdmins(o.data)}).catch(()=>{});heartbeat().then(load).catch(()=>{});const timer=setInterval(()=>heartbeat().then(load).catch(()=>{}),30000);return()=>clearInterval(timer)},[user?.token,user?.id,user?.name,user?.level]);
   const saveProfile = async (e) => {
     e.preventDefault();
     try {
@@ -134,7 +134,6 @@ export default function Admin() {
       })
       .catch((e) => notify(e.message, "error"));
   }, [isSuper, user?.token]);
-  useEffect(()=>{if(!user?.token)return;let active=true;const pulse=async()=>{try{await fetch(`${BASE}/auth/heartbeat`,{method:"POST",headers:{Authorization:`Bearer ${user.token}`}});const r=await fetch(`${BASE}/admins/online`,{headers:{Authorization:`Bearer ${user.token}`}});const out=await r.json();if(active&&r.ok)setOnlineAdmins(out.data||[])}catch{}};pulse();const timer=setInterval(pulse,30000);return()=>{active=false;clearInterval(timer)}},[user?.token]);
   const filtered = useMemo(() => members.filter((m) => {
     const text = `${m.first_name} ${m.last_name}`.toLowerCase();
     return text.includes(query.toLowerCase()) && (!generationFilter || String(m.generation) === generationFilter) && (!roleFilter || (m.role || "") === roleFilter) && (!occupationFilter || (m.occupation || "") === occupationFilter) && (!statusFilter || (m.status || "") === statusFilter);
@@ -285,6 +284,7 @@ export default function Admin() {
   const [auditLogs, setAuditLogs] = useState([]);
   const [backupFile, setBackupFile] = useState(null);
   const loadAudit = async () => { try { const r=await fetch(`${BASE}/audit-logs`,{headers:{Authorization:`Bearer ${user.token}`}}); const out=await r.json(); if(!r.ok) throw new Error(out.message); setAuditLogs(out.data); } catch(e){notify(e.message,"error")} };
+  useEffect(()=>{if(user?.token)loadAudit()},[user?.token]);
   const downloadBackup = async () => { try { const r=await fetch(`${BASE}/backups/members`,{headers:{Authorization:`Bearer ${user.token}`}}); const out=await r.json(); if(!r.ok) throw new Error(out.message); const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([JSON.stringify(out.backup,null,2)],{type:"application/json"})); a.download=`riverra-backup-${new Date().toISOString().slice(0,10)}.json`; a.click(); notify("Backup berhasil diunduh."); } catch(e){notify(e.message,"error")} };
   const restoreBackup = async () => { if(!backupFile||!confirm("Restore akan mengganti seluruh data anggota. Lanjutkan?")) return; try { const data=JSON.parse(await backupFile.text()); const r=await fetch(`${BASE}/backups/members/restore`,{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${user.token}`},body:JSON.stringify(data)}); const out=await r.json(); if(!r.ok) throw new Error(out.message); persistMembers(out.data); notify(out.message); } catch(e){notify(`Restore gagal: ${e.message}`,"error")} };
   if (!user)
@@ -404,7 +404,7 @@ export default function Admin() {
         )}
         <button className={tab === "audit" ? "selected" : ""} onClick={() => { setTab("audit"); loadAudit(); }}>Audit log</button>{isSuper && <button className={tab === "backup" ? "selected" : ""} onClick={() => setTab("backup")}>Backup / Restore</button>}
       </div>
-      {tab === "dashboard" && <section className="stats-grid"><div className="stat-card"><small>Total anggota</small><strong>{members.length}</strong></div><div className="stat-card"><small>Total foto galeri</small><strong>{gallery.length}</strong></div><div className="stat-card"><small>Admin online</small><strong>{onlineAdmins.length}</strong><div className="online-list">{onlineAdmins.map(a=><span key={a.id}><i></i>{a.name}</span>)}</div></div><div className="stat-card"><small>Aktivitas terbaru</small><strong>{auditLogs.length}</strong></div></section>}
+      {tab === "dashboard" && <section className="stats-grid"><div className="stat-card"><small>Total anggota</small><strong>{members.length}</strong></div><div className="stat-card"><small>Total foto galeri</small><strong>{gallery.length}</strong></div><div className="stat-card"><small>Admin online</small><strong>{onlineAdmins.length}</strong><div className="online-list">{onlineAdmins.map(a=><span key={a.id}>{a.discord_avatar?<img src={a.discord_avatar} alt=""/>:<i></i>}<b>{a.name}</b></span>)}</div></div><div className="stat-card"><small>Aktivitas terbaru</small><strong>{auditLogs.length}</strong></div></section>}
       {tab === "family" && (
         <section className="admin-grid">
           <form className="admin-card member-form" onSubmit={submit}>
@@ -586,7 +586,6 @@ export default function Admin() {
     </main>
   );
 }
-
 
 
 
