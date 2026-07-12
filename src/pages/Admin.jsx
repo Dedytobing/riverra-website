@@ -37,15 +37,23 @@ export default function Admin() {
   );
   const [form, setForm] = useState(empty),
     [editing, setEditing] = useState(false),
-    [tab, setTab] = useState("family"),
+    [tab, setTab] = useState("dashboard"),
     [query, setQuery] = useState(""),
     [notice, setNotice] = useState(null),
     [profileOpen, setProfileOpen] = useState(false),
-    [profileName, setProfileName] = useState("");
+    [profileName, setProfileName] = useState(""),
+    [generationFilter, setGenerationFilter] = useState(""),
+    [roleFilter, setRoleFilter] = useState(""),
+    [occupationFilter, setOccupationFilter] = useState(""),
+    [statusFilter, setStatusFilter] = useState(""),
+    [page, setPage] = useState(1),
+    [onlineAdmins, setOnlineAdmins] = useState([]);
+  const pageSize = 20;
   const notify = (message, type = "success") => {
     setNotice({ message, type });
     setTimeout(() => setNotice(null), 3500);
   };
+  useEffect(()=>{if(!user)return;const heartbeat=()=>fetch(`${BASE}/auth/heartbeat`,{method:"POST",headers:{Authorization:`Bearer ${user.token}`}}).catch(()=>{});const load=()=>fetch(`${BASE}/admins/online`,{headers:{Authorization:`Bearer ${user.token}`}}).then(r=>r.json()).then(o=>{if(o.success)setOnlineAdmins(o.data)}).catch(()=>{});heartbeat();load();const timer=setInterval(()=>{heartbeat();load()},30000);return()=>clearInterval(timer)},[user?.token]);
   const saveProfile = async (e) => {
     e.preventDefault();
     try {
@@ -76,6 +84,7 @@ export default function Admin() {
     user && ["PJ Server", "PJ Universal", "Super Admin"].includes(user.level);
   const canGallery =
     user && ["PJ Universal", "Super Admin"].includes(user.level);
+  const canDeleteMembers = user && ["PJ Universal", "Super Admin"].includes(user.level);
   const isSuper = user?.level === "Super Admin";
   useEffect(() => {
     fetch(API)
@@ -125,15 +134,13 @@ export default function Admin() {
       })
       .catch((e) => notify(e.message, "error"));
   }, [isSuper, user?.token]);
-  const filtered = useMemo(
-    () =>
-      members.filter((m) =>
-        `${m.first_name} ${m.last_name}`
-          .toLowerCase()
-          .includes(query.toLowerCase())
-      ),
-    [members, query]
-  );
+  useEffect(()=>{if(!user?.token)return;let active=true;const pulse=async()=>{try{await fetch(`${BASE}/auth/heartbeat`,{method:"POST",headers:{Authorization:`Bearer ${user.token}`}});const r=await fetch(`${BASE}/admins/online`,{headers:{Authorization:`Bearer ${user.token}`}});const out=await r.json();if(active&&r.ok)setOnlineAdmins(out.data||[])}catch{}};pulse();const timer=setInterval(pulse,30000);return()=>{active=false;clearInterval(timer)}},[user?.token]);
+  const filtered = useMemo(() => members.filter((m) => {
+    const text = `${m.first_name} ${m.last_name}`.toLowerCase();
+    return text.includes(query.toLowerCase()) && (!generationFilter || String(m.generation) === generationFilter) && (!roleFilter || (m.role || "") === roleFilter) && (!occupationFilter || (m.occupation || "") === occupationFilter) && (!statusFilter || (m.status || "") === statusFilter);
+  }), [members, query, generationFilter, roleFilter, occupationFilter, statusFilter]);
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const pageMembers = filtered.slice((page - 1) * pageSize, page * pageSize);
   const uploadMemberPhoto = async (file) => {
     if (!file) return;
     const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
@@ -372,7 +379,7 @@ export default function Admin() {
           </div>
         </div>
       )}
-      <div className="admin-tabs">
+      <div className="admin-tabs"><button className={tab === "dashboard" ? "selected" : ""} onClick={() => setTab("dashboard")}>Dashboard</button>
         <button
           className={tab === "family" ? "selected" : ""}
           onClick={() => setTab("family")}
@@ -395,8 +402,9 @@ export default function Admin() {
             Akses admin <span>{users.length}</span>
           </button>
         )}
-        {isSuper && <><button className={tab === "audit" ? "selected" : ""} onClick={() => { setTab("audit"); loadAudit(); }}>Audit log</button><button className={tab === "backup" ? "selected" : ""} onClick={() => setTab("backup")}>Backup / Restore</button></>}
+        <button className={tab === "audit" ? "selected" : ""} onClick={() => { setTab("audit"); loadAudit(); }}>Audit log</button>{isSuper && <button className={tab === "backup" ? "selected" : ""} onClick={() => setTab("backup")}>Backup / Restore</button>}
       </div>
+      {tab === "dashboard" && <section className="stats-grid"><div className="stat-card"><small>Total anggota</small><strong>{members.length}</strong></div><div className="stat-card"><small>Total foto galeri</small><strong>{gallery.length}</strong></div><div className="stat-card"><small>Admin online</small><strong>{onlineAdmins.length}</strong><div className="online-list">{onlineAdmins.map(a=><span key={a.id}><i></i>{a.name}</span>)}</div></div><div className="stat-card"><small>Aktivitas terbaru</small><strong>{auditLogs.length}</strong></div></section>}
       {tab === "family" && (
         <section className="admin-grid">
           <form className="admin-card member-form" onSubmit={submit}>
@@ -465,7 +473,8 @@ export default function Admin() {
                 placeholder="Cari nama..."
               />
             </div>
-            {filtered.map((m) => (
+            <div className="member-filters"><select value={generationFilter} onChange={e=>{setGenerationFilter(e.target.value);setPage(1)}}><option value="">Semua generasi</option>{[...new Set(members.map(m=>m.generation).filter(Boolean))].sort((a,b)=>a-b).map(g=><option key={g}>{g}</option>)}</select><select value={roleFilter} onChange={e=>{setRoleFilter(e.target.value);setPage(1)}}><option value="">Semua role</option>{[...new Set(members.map(m=>m.role).filter(Boolean))].map(v=><option key={v}>{v}</option>)}</select><select value={occupationFilter} onChange={e=>{setOccupationFilter(e.target.value);setPage(1)}}><option value="">Semua pekerjaan</option>{[...new Set(members.map(m=>m.occupation).filter(Boolean))].map(v=><option key={v}>{v}</option>)}</select><select value={statusFilter} onChange={e=>{setStatusFilter(e.target.value);setPage(1)}}><option value="">Semua status</option><option>Living</option><option>Deceased</option></select></div>
+            {pageMembers.map((m) => (
               <div className="member-row" key={m.id}>
                 <div>
                   <b>
@@ -489,11 +498,10 @@ export default function Admin() {
                 >
                   Edit
                 </button>
-                <button className="danger" onClick={() => remove(m.id)}>
-                  Hapus
-                </button>
+                {canDeleteMembers && <button className="danger" onClick={() => remove(m.id)}>Hapus</button>}
               </div>
             ))}
+            <div className="pagination"><button disabled={page<=1} onClick={()=>setPage(page-1)}>‹</button><span>Halaman {page} / {pageCount} · {filtered.length} data</span><button disabled={page>=pageCount} onClick={()=>setPage(page+1)}>›</button></div>
           </div>
         </section>
       )}
@@ -534,7 +542,7 @@ export default function Admin() {
           </div>
         </section>
       )}
-      {tab === "audit" && isSuper && <section className="admin-card audit-panel"><h2>Audit log admin</h2>{auditLogs.map(log=><div className="audit-entry" key={log.id}><div className="audit-main"><b>{log.admin_name}</b><span>{log.action} · {log.entity_type} #{log.entity_id}</span><small>{new Date(log.created_at).toLocaleString("id-ID")}</small></div>{log.details&&<div className="audit-details">{Object.entries(log.details).map(([key,value])=>key === "changes" && value && typeof value === "object" ? <div className="audit-change-list" key={key}>{Object.entries(value).map(([field,change])=><div className="audit-change" key={field}><b>{field.replaceAll("_"," ")}</b><span>{String(change.before ?? "kosong")}</span><i>→</i><span>{String(change.after ?? "kosong")}</span></div>)}</div> : <span key={key}><b>{key.replaceAll("_"," ")}:</b> {Array.isArray(value)?value.join(", "):String(value)}</span>)}</div>}</div>)}</section>}
+      {tab === "audit" && <section className="admin-card audit-panel"><h2>Audit log admin</h2>{auditLogs.map(log=><div className="audit-entry" key={log.id}><div className="audit-main"><b>{log.admin_name}</b><span>{log.action} · {log.entity_type} #{log.entity_id}</span><small>{new Date(log.created_at).toLocaleString("id-ID")}</small></div>{log.details&&<div className="audit-details">{Object.entries(log.details).map(([key,value])=>key === "changes" && value && typeof value === "object" ? <div className="audit-change-list" key={key}>{Object.entries(value).map(([field,change])=><div className="audit-change" key={field}><b>{field.replaceAll("_"," ")}</b><span>{String(change.before ?? "kosong")}</span><i>→</i><span>{String(change.after ?? "kosong")}</span></div>)}</div> : <span key={key}><b>{key.replaceAll("_"," ")}:</b> {Array.isArray(value)?value.join(", "):String(value)}</span>)}</div>}</div>)}</section>}
       {tab === "access" && isSuper && (
         <section className="admin-card">
           <h2>Manajemen akses admin</h2>
@@ -578,6 +586,10 @@ export default function Admin() {
     </main>
   );
 }
+
+
+
+
 
 
 
