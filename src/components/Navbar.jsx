@@ -1,7 +1,14 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 
 export default function Navbar() {
   const currentPath = window.location.pathname;
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  useEffect(() => {
+    const close = () => setMenuOpen(false);
+    window.addEventListener("resize", close);
+    return () => window.removeEventListener("resize", close);
+  }, []);
 
   return (
     <header>
@@ -18,7 +25,10 @@ export default function Navbar() {
           </div>
         </div>
 
-        <nav>
+        <button className="nav-toggle" type="button" aria-label={menuOpen ? "Close navigation" : "Open navigation"} aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}>
+          <span /><span /><span />
+        </button>
+        <nav className={menuOpen ? "is-open" : ""} onClick={() => setMenuOpen(false)}>
           <a href="/" className={currentPath === "/" || currentPath === "/index.html" ? "active" : ""}>
             Dashboard
           </a>

@@ -22,22 +22,6 @@ const MEMBERS = [
 ];
 
 export default function HighTable() {
-  // Gunakan Flexbox Layout inline untuk menjamin posisi sejajar menyamping
-  const flexContainerStyle = {
-    display: "flex",
-    justifyContent: "center",
-    alignItems: "stretch",
-    gap: "30px",
-    flexWrap: "wrap",
-    width: "100%",
-    marginTop: "5px"
-  };
-
-  const cardStyle = {
-    flex: "1 1 300px",
-    maxWidth: "360px"
-  };
-
   return (
     <section id="high-table" className="section high-table">
       <div className="container">
@@ -48,9 +32,9 @@ export default function HighTable() {
           <div className="accent-line-center"></div>
         </div>
 
-        <div style={flexContainerStyle}>
+        <div className="founding-members-grid">
           {MEMBERS.map((member, index) => (
-            <div className="profile-card" style={cardStyle} key={index}>
+            <div className="profile-card" key={index}>
               <div className="profile-img-container">
                 <img src={member.img} alt={`${member.name} Profile`} />
                 <div className="card-glow"></div>

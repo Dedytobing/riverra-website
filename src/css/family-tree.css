@@ -133,6 +133,8 @@
   width: 100%;
   height: 100%;
   cursor: grab;
+  touch-action: none;
+  user-select: none;
 }
 .tree-canvas svg:active {
   cursor: grabbing;
@@ -205,6 +207,9 @@
   align-self: start;
   min-height: 390px;
   padding: 24px;
+  min-width: 0;
+  box-sizing: border-box;
+  overflow-wrap: anywhere;
 }
 .profile-sidebar--empty {
   display: flex;
@@ -249,12 +254,19 @@
   color: #ead9b8;
   font-size: 13px;
   text-align: right;
+  min-width: 0;
+  max-width: 62%;
+  overflow-wrap: anywhere;
 }
 .profile-bio {
+  margin: 0;
+  overflow-wrap: anywhere;
   color: #c7c0b7;
   font-size: 13px;
   line-height: 1.7;
 }
+.profile-drawer-toggle,
+.profile-close { display: none; }
 @media (max-width: 850px) {
   .family-tree-page {
     padding: 92px 14px 14px;
@@ -268,6 +280,7 @@
   }
   .tree-workspace {
     grid-template-columns: 1fr;
+    position: relative;
   }
   .tree-statistics { grid-template-columns: repeat(2, 1fr); gap: 14px; }
   .profile-sidebar {
@@ -300,8 +313,107 @@
   }
   .tree-canvas {
     min-height: 360px;
+    height: min(62vh, 520px);
   }
   .tree-hint {
     line-height: 1.5;
   }
+}
+
+/* Responsive family tree layout: keep the desktop composition intact while
+   making controls, cards and the profile panel comfortable at every width. */
+@media (min-width: 1440px) {
+  .family-tree-page { padding-inline: 32px; }
+  .tree-panel { padding: 24px; }
+}
+@media (min-width: 1024px) and (max-width: 1439px) {
+  .family-tree-page { padding-inline: 20px; }
+  .tree-workspace { grid-template-columns: minmax(0, 1fr) 280px; gap: 16px; }
+  .tree-statistics { gap: 16px; }
+}
+@media (min-width: 768px) and (max-width: 1023px) {
+  .family-tree-page { padding: 104px 16px 20px; }
+  .tree-workspace { grid-template-columns: minmax(0, 1fr) 250px; gap: 14px; }
+  .tree-panel { padding: 14px; }
+  .tree-canvas { min-height: 420px; height: 58vh; }
+  .tree-statistics { gap: 12px; }
+  .tree-stat-card { min-height: 100px; }
+  .profile-sidebar { padding: 16px; }
+}
+@media (max-width: 767px) {
+  .family-tree-page { padding: 86px 10px 16px; overflow-x: hidden; }
+  .tree-header-control { gap: 12px; margin-bottom: 14px; }
+  .search-box { gap: 8px; }
+  .search-box input, .search-box select { height: 48px; font-size: 16px; }
+  .tree-statistics { gap: 8px; margin-bottom: 14px; }
+  .tree-stat-card { min-height: 82px; }
+  .tree-stat-card strong { font-size: clamp(26px, 8vw, 34px); }
+  .tree-stat-card span { font-size: 11px; }
+  .tree-panel { padding: 10px; }
+  .tree-canvas { min-height: 330px; height: min(64vh, 560px); }
+  .tree-hint { font-size: 11px; margin-inline: 2px; }
+  .profile-drawer-toggle {
+    display: block;
+    position: fixed;
+    z-index: 20;
+    right: 14px;
+    bottom: 14px;
+    min-height: 44px;
+    padding: 0 16px;
+    border: 1px solid #a9854b;
+    border-radius: 999px;
+    color: #1a1411;
+    background: #e3c482;
+    font: 700 12px Inter, sans-serif;
+    box-shadow: 0 8px 24px rgba(0,0,0,.35);
+    transition: opacity .2s ease, visibility .2s ease;
+  }
+  .profile-drawer-toggle.is-hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+  .profile-sidebar {
+    display: none;
+    position: fixed;
+    z-index: 19;
+    inset: auto 10px 10px;
+    max-height: min(78vh, 620px);
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 20px;
+    border-radius: 16px;
+    box-shadow: 0 20px 60px rgba(0,0,0,.55);
+  }
+  .profile-sidebar.is-open { display: block; }
+  .profile-sidebar--empty { display: none; }
+  .profile-sidebar--empty.is-open { display: flex; }
+  .profile-close {
+    display: grid;
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    width: 36px;
+    height: 36px;
+    place-items: center;
+    border: 1px solid rgba(255,255,255,.2);
+    border-radius: 50%;
+    color: #f7f1e7;
+    background: rgba(0,0,0,.25);
+    font-size: 24px;
+    line-height: 1;
+  }
+  .profile-photo { width: min(180px, 65vw); margin: 8px auto 14px; display: block; }
+  .profile-details div { align-items: flex-start; flex-wrap: wrap; }
+  .profile-details dd { max-width: 100%; text-align: left; }
+  .profile-bio { padding-bottom: 4px; }
+}
+@media (max-width: 480px) {
+  .family-tree-page { padding-inline: 8px; }
+  .tree-statistics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tree-panel { border-radius: 12px; }
+  .tree-canvas { min-height: 300px; height: 58vh; }
+  .tree-hint { line-height: 1.45; }
+}
+@media (max-width: 360px) {
+  .tree-stat-card { min-height: 72px; }
+  .tree-stat-card strong { font-size: 24px; }
+  .tree-stat-card span { font-size: 10px; }
+  .tree-canvas { min-height: 280px; }
 }

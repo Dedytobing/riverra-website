@@ -3,8 +3,9 @@ import * as d3 from "d3";
 import HeaderControl from "../components/HeaderControl";
 import SidebarProfile from "../components/SidebarProfile";
 import "../css/family-tree.css";
+import { API_BASE } from "../lib/api";
 
-const API = "https://riverra-backend.vercel.app/api/members";
+const API = `${API_BASE}/members`;
 const ROOT = "__riverra_root__";
 const founders = new Set(["hernandes", "charleta"]);
 const nameOf = (member) =>
@@ -89,7 +90,7 @@ function makeUnits(members) {
     units.push(unit);
   });
   const founderUnit = units.find((unit) =>
-    unit.members.some((member) => founders.has(nameOf(member)))
+    unit.members.some((member) => member.is_founder === true || founders.has(nameOf(member)))
   )?.id;
   const generationOf = new Map(
     units.map((unit) => [
@@ -122,13 +123,62 @@ function makeUnits(members) {
   });
 }
 
+function membersForSearch(members, query, generation) {
+  const term = query.toLowerCase().trim();
+  const byId = new Map(members.map((member) => [String(member.id), member]));
+  const generationMatches = (member) =>
+    generation === "all" || String(member.generation) === generation;
+  const textMatches = (member) =>
+    `${member.first_name || ""} ${member.last_name || ""} ${member.occupation || ""}`
+      .toLowerCase()
+      .includes(term);
+
+  const included = new Set();
+  const hasFilter = Boolean(term) || generation !== "all";
+  if (!hasFilter) return members;
+
+  const queue = members
+    .filter((member) => generationMatches(member) && (!term || textMatches(member)))
+    .map((member) => String(member.id));
+  const includeAllAncestors = Boolean(term);
+
+  // Search walks the complete ancestor chain; a generation-only filter adds
+  // exactly one parent level so the selected generation stays readable.
+  while (queue.length) {
+    const id = queue.shift();
+    if (included.has(id)) continue;
+    const member = byId.get(id);
+    if (!member) continue;
+    included.add(id);
+    [member.father_id, member.mother_id]
+      .filter(Boolean)
+      .map(String)
+      .forEach((parentId) => {
+        if (includeAllAncestors) {
+          if (!included.has(parentId)) queue.push(parentId);
+        } else {
+          included.add(parentId);
+        }
+      });
+  }
+
+  [...included].forEach((id) => {
+    const member = byId.get(id);
+    const spouseId = member?.spouse_id || member?.partner_id || member?.spouse?.id;
+    if (spouseId && byId.has(String(spouseId))) included.add(String(spouseId));
+  });
+
+  return members.filter((member) => included.has(String(member.id)));
+}
+
 export default function FamilyTree() {
   const svgRef = useRef(null),
     [members, setMembers] = useState([]),
     [selected, setSelected] = useState(null);
   const [query, setQuery] = useState(""),
     [generation, setGeneration] = useState("all"),
-    [status, setStatus] = useState("loading");
+    [status, setStatus] = useState("loading"),
+    [profileOpen, setProfileOpen] = useState(false);
   const generations = new Set(
     members.map((member) => member.generation).filter(Boolean)
   ).size;
@@ -140,35 +190,31 @@ export default function FamilyTree() {
       .filter(Boolean)
   ).size;
   useEffect(() => {
+    const controller = new AbortController();
     let live = true;
-    fetch(API)
-      .then((r) => r.json())
+    fetch(API, { signal: controller.signal, headers: { Accept: "application/json" } })
+      .then((response) => {
+        if (!response.ok) throw new Error(`Members request failed (${response.status})`);
+        return response.json();
+      })
       .then((json) => {
-        if (!json.success) throw Error();
+        if (!json?.success || !Array.isArray(json.data)) throw new Error("Invalid members response");
         if (live) {
           setMembers(json.data);
           setStatus("ready");
         }
       })
-      .catch(() => live && setStatus("error"));
+      .catch((error) => {
+        if (live && error.name !== "AbortError") setStatus("error");
+      });
     return () => {
       live = false;
+      controller.abort();
     };
   }, []);
   useEffect(() => {
     if (!members.length || !svgRef.current) return;
-    const term = query.toLowerCase().trim();
-    const shown = members.filter(
-      (member) =>
-        founders.has(nameOf(member)) ||
-        ((!term ||
-          `${member.first_name || ""} ${member.last_name || ""} ${
-            member.occupation || ""
-          }`
-            .toLowerCase()
-            .includes(term)) &&
-          (generation === "all" || String(member.generation) === generation))
-    );
+    const shown = membersForSearch(members, query, generation);
     const units = makeUnits(shown),
       svg = d3.select(svgRef.current);
     svg.selectAll("*").remove();
@@ -200,8 +246,13 @@ export default function FamilyTree() {
       transform = d3.zoomIdentity
         .translate(box.width / 2 - ((minX + maxX) / 2) * scale, 42)
         .scale(scale);
+    const viewportWidth = Math.max(1, box.width);
+    const viewportHeight = Math.max(1, box.height);
     const zoom = d3
       .zoom()
+      // CSS gives the SVG relative dimensions (100%). Supplying a pixel
+      // extent prevents d3-zoom from reading an unresolved SVGLength.
+      .extent([[0, 0], [viewportWidth, viewportHeight]])
       .scaleExtent([0.3, 2.5])
       .on("zoom", (event) => canvas.attr("transform", event.transform));
     svg.call(zoom).call(zoom.transform, transform);
@@ -245,10 +296,18 @@ export default function FamilyTree() {
       .attr("class", "tree-node")
       .attr("transform", (item) => `translate(${item.offset},0)`)
       .attr("tabindex", 0)
-      .on("click", (_, item) => setSelected(item.member))
+      .attr("role", "button")
+      .attr("aria-label", (item) => `View ${compactName(item.member)} profile`)
+      .on("click", (_, item) => {
+        setSelected(item.member);
+        setProfileOpen(true);
+      })
       .on("keydown", (event, item) => {
-        if (event.key === "Enter" || event.key === " ")
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
           setSelected(item.member);
+          setProfileOpen(true);
+        }
       });
     cards
       .append("rect")
@@ -292,7 +351,7 @@ export default function FamilyTree() {
           <span>Generations</span>
         </div>
         <div className="tree-stat-card">
-          <strong>1</strong>
+          <strong>{new Set(members.filter((member) => member.is_founder === true || founders.has(nameOf(member))).map((member) => String(member.id))).size}</strong>
           <span>Founders</span>
         </div>
         <div className="tree-stat-card">
@@ -309,7 +368,7 @@ export default function FamilyTree() {
       <main className="tree-workspace">
         <div className="tree-panel">
           <div className="tree-canvas">
-            <svg ref={svgRef} aria-label="Interactive family tree" />
+            <svg ref={svgRef} role="img" aria-label="Interactive family tree" />
             {status === "loading" && (
               <div className="tree-message">Loading family archive...</div>
             )}
@@ -323,7 +382,16 @@ export default function FamilyTree() {
             Drag to explore · Scroll to zoom · Select a member for details
           </p>
         </div>
-        <SidebarProfile member={selected} />
+        <button
+          type="button"
+          className={`profile-drawer-toggle${profileOpen ? " is-hidden" : ""}`}
+          aria-expanded={profileOpen}
+          aria-controls="family-profile"
+          onClick={() => setProfileOpen((open) => !open)}
+        >
+          {profileOpen ? "Hide profile" : "View profile"}
+        </button>
+        <SidebarProfile member={selected} open={profileOpen} onClose={() => setProfileOpen(false)} />
       </main>
     </section>
   );

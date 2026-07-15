@@ -1,16 +1,37 @@
-# React + Vite
+# Riverra Family Archive
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+React/Vite single-page application for the Riverra family archive. The public site contains the family landing page and interactive D3 family tree; the admin area connects to the Riverra API for authenticated member management.
 
-Currently, two official plugins are available:
+## Development
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+```bash
+npm install
+npm run dev
+```
 
-## React Compiler
+Production verification:
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+```bash
+npm run lint
+npm run build
+```
 
-## Expanding the Oxlint configuration
+## Configuration
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+Create `.env.local` for local development when using a different API or Cloudinary account:
+
+```env
+VITE_API_URL=https://riverra-backend.vercel.app/api
+VITE_CLOUDINARY_CLOUD_NAME=your_cloud_name
+VITE_CLOUDINARY_UPLOAD_PRESET=your_upload_preset
+```
+
+Only public, non-secret configuration belongs in `VITE_*` variables. Upload presets must be restricted in Cloudinary; privileged credentials must never be placed in frontend environment variables.
+
+## Deployment
+
+Netlify runs `npm run build` and publishes `dist`. The SPA fallback is configured in `netlify.toml`. The backend must enforce authentication and role authorization independently of the controls rendered by this frontend.
+
+## Data and privacy
+
+Family data is loaded from the API. Browser storage is used only as a short-lived UI cache and must not be treated as the source of truth. Avoid placing bearer tokens in URLs; production OAuth should exchange a one-time code for a Secure, HttpOnly session cookie.

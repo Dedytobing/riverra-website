@@ -1,43 +1,62 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import "/src/css/style.css"; 
 
 // Import Library Animasi
 import Lenis from "lenis";
 import gsap from "gsap";
-import { ScrollTrigger } from "gsap/ScrollTrigger";
 
 // Import Komponen Mandiri
 import Loader from "../components/Loader";
 import Hero from "../components/Hero";
 import HighTable from "../components/HighTable";
+import { API_BASE } from "../lib/api";
 
-
-// Registrasi Plugin GSAP
-gsap.registerPlugin(ScrollTrigger);
 
 function App() {
   // State untuk mengontrol pop-up gambar di galeri
   const [selectedImg, setSelectedImg] = useState(null);
+  const [remoteGallery, setRemoteGallery] = useState([]);
+  const closeButtonRef = useRef(null);
+  const appRef = useRef(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch(`${API_BASE}/gallery`, { signal: controller.signal })
+      .then((response) => response.ok ? response.json() : null)
+      .then((body) => {
+        if (Array.isArray(body?.data) && body.data.length) setRemoteGallery(body.data);
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, []);
 
   useEffect(() => {
     // Matikan pemulihan scroll bawaan browser agar tidak mengingat posisi terakhir sebelum refresh
-    if ('scrollRestoration' in window.history) {
-      window.history.scrollRestoration = 'manual';
+    const previousScrollRestoration = window.history.scrollRestoration;
+    if ('scrollRestoration' in window.history) window.history.scrollRestoration = 'manual';
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let lenis = null;
+    let frameId = null;
+    let revealObserver = null;
+    if (prefersReducedMotion) {
+      const loader = document.getElementById('loader');
+      if (loader) loader.style.display = 'none';
+      return () => { window.history.scrollRestoration = previousScrollRestoration; };
     }
 
-    let ctx = gsap.context(() => {
+    const ctx = gsap.context(() => {
       
       // 1. TIMELINE SMOOTH SCROLL (LENIS)
-      const lenis = new Lenis({
+      lenis = new Lenis({
         duration: 1.2,
         easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
       });
 
       function raf(time) {
         lenis.raf(time);
-        requestAnimationFrame(raf);
+        frameId = requestAnimationFrame(raf);
       }
-      requestAnimationFrame(raf);
+      frameId = requestAnimationFrame(raf);
 
       // 2. TIMELINE LOADER & ENTERING ANIMATION
       const tl = gsap.timeline();
@@ -74,25 +93,44 @@ function App() {
         ease: "power3.out"
       }, "-=0.2");
 
-      // 3. SCROLLTRIGGER ANIMATION (SCROLL REVEAL)
-      gsap.from(".about-header", {
-        x: -50, opacity: 0, duration: 1, ease: "power3.out",
-        scrollTrigger: { trigger: ".about", start: "top 80%" }
-      });
+      // 3. SCROLL REVEAL. IntersectionObserver avoids ScrollTrigger's
+      // temporary 100vh measuring node racing with React Strict Mode cleanup.
+      const about = appRef.current?.querySelector(".about");
+      if (about) {
+        gsap.set(".about-header", { x: -50, opacity: 0 });
+        gsap.set(".about-text p", { y: 30, opacity: 0 });
+        revealObserver = new IntersectionObserver(([entry]) => {
+          if (!entry.isIntersecting) return;
+          gsap.to(".about-header", { x: 0, opacity: 1, duration: 1, ease: "power3.out" });
+          gsap.to(".about-text p", { y: 0, opacity: 1, duration: 0.8, stagger: 0.2, ease: "power2.out" });
+          revealObserver?.disconnect();
+        }, { rootMargin: "0px 0px -20% 0px", threshold: 0.05 });
+        revealObserver.observe(about);
+      }
 
-      gsap.from(".about-text p", {
-        y: 30, opacity: 0, duration: 0.8, stagger: 0.2, ease: "power2.out",
-        scrollTrigger: { trigger: ".about", start: "top 75%" }
-      });
-
-    });
+    }, appRef);
 
     // Cleanup memori saat unmount
-    return () => ctx.revert();
+    return () => {
+      if (frameId !== null) cancelAnimationFrame(frameId);
+      revealObserver?.disconnect();
+      if (lenis) lenis.destroy();
+      // Revert only animations created inside this page context.
+      ctx.revert();
+      window.history.scrollRestoration = previousScrollRestoration;
+    };
   }, []);
 
+  useEffect(() => {
+    if (!selectedImg) return undefined;
+    closeButtonRef.current?.focus();
+    const onKeyDown = (event) => event.key === "Escape" && setSelectedImg(null);
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [selectedImg]);
+
   return (
-    <div id="app">
+    <div id="app" ref={appRef}>
       <Loader />
       <Hero />
 
@@ -134,20 +172,24 @@ function App() {
             <div className="accent-line-center"></div>
           </div>
           
-          {/* Kontainer Flexbox 4 Kolom */}
-          <div style={{ display: "flex", justifyContent: "center", gap: "25px", flexWrap: "wrap", width: "100%" }}>
+          <div className="family-activities-grid">
+            {remoteGallery.map((item) => (
+              <div key={item.id || item.src} className="img-card" onClick={() => setSelectedImg({ src: item.src, title: item.name, cat: item.caption || "FAMILY ARCHIVE" })}>
+                <img src={item.src} alt={item.caption || item.name || "Family archive"} width="280" height="300" loading="lazy" decoding="async" />
+                <div className="img-overlay"><div className="overlay-inner"><span className="gallery-cat">{item.caption || "FAMILY ARCHIVE"}</span><h3>{item.name}</h3></div></div>
+              </div>
+            ))}
             
             {/* Foto 1 */}
             <div 
               className="img-card" 
-              style={{ flex: "1 1 240px", maxWidth: "280px", cursor: "pointer" }}
               onClick={() => setSelectedImg({
                 src: "https://cdn.corenexis.com/f/gDYmYc4r6NG.png",
                 title: "RIVERRA ASSEMBLY",
                 cat: "FAMILY VISIT"
               })}
             >
-              <img src="https://cdn.corenexis.com/f/gDYmYc4r6NG.png" alt="Riverra Assembly" />
+              <img src="https://cdn.corenexis.com/f/gDYmYc4r6NG.png" alt="Riverra Assembly" width="280" height="300" loading="lazy" decoding="async" />
               <div className="img-overlay">
                 <div className="overlay-inner">
                   <span className="gallery-cat">FAMILY VISIT</span>
@@ -159,14 +201,13 @@ function App() {
             {/* Foto 2 */}
             <div 
               className="img-card" 
-              style={{ flex: "1 1 240px", maxWidth: "280px", cursor: "pointer" }}
               onClick={() => setSelectedImg({
                 src: "https://cdn.corenexis.com/f/v3lr3dpmGfM.png",
                 title: "FAMILY GATHERING",
                 cat: "TOGETHER AS ONE"
               })}
             >
-              <img src="https://cdn.corenexis.com/f/v3lr3dpmGfM.png" alt="Family Gathering" />
+              <img src="https://cdn.corenexis.com/f/v3lr3dpmGfM.png" alt="Family Gathering" width="280" height="300" loading="lazy" decoding="async" />
               <div className="img-overlay">
                 <div className="overlay-inner">
                   <span className="gallery-cat">TOGETHER AS ONE</span>
@@ -178,14 +219,13 @@ function App() {
             {/* Foto 3 */}
             <div 
               className="img-card" 
-              style={{ flex: "1 1 240px", maxWidth: "280px", cursor: "pointer" }}
               onClick={() => setSelectedImg({
                 src: "https://cdn.corenexis.com/f/DOrhXeSVF72.png",
                 title: "SPECIAL MOMENTS",
                 cat: "SHARED HAPPINESS"
               })}
             >
-              <img src="https://cdn.corenexis.com/f/DOrhXeSVF72.png" alt="Special Moments" />
+              <img src="https://cdn.corenexis.com/f/DOrhXeSVF72.png" alt="Special Moments" width="280" height="300" loading="lazy" decoding="async" />
               <div className="img-overlay">
                 <div className="overlay-inner">
                   <span className="gallery-cat">SHARED HAPPINESS</span>
@@ -197,14 +237,13 @@ function App() {
             {/* Foto 4 */}
             <div 
               className="img-card" 
-              style={{ flex: "1 1 240px", maxWidth: "280px", cursor: "pointer" }}
               onClick={() => setSelectedImg({
                 src: "https://cdn.corenexis.com/f/bgedwEnpitG.png",
                 title: "FAMILY REUNION",
                 cat: "One Family, One Legacy"
               })}
             >
-              <img src="https://cdn.corenexis.com/f/bgedwEnpitG.png" alt="Family Reunion" />
+              <img src="https://cdn.corenexis.com/f/bgedwEnpitG.png" alt="Family Reunion" width="280" height="300" loading="lazy" decoding="async" />
               <div className="img-overlay">
                 <div className="overlay-inner">
                   <span className="gallery-cat">One Family, One Legacy</span>
@@ -218,7 +257,10 @@ function App() {
 
         {/* MODAL POP-UP LIGHTBOX FULLSCREEN */}
         {selectedImg && (
-          <div 
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="gallery-modal-title"
             onClick={() => setSelectedImg(null)} 
             style={{
               position: "fixed",
@@ -235,20 +277,29 @@ function App() {
             }}
           >
             {/* Tombol Silang */}
-            <button 
+            <button
+              ref={closeButtonRef}
+              type="button"
+              aria-label="Close gallery"
               onClick={() => setSelectedImg(null)}
-              style={{
-                position: "absolute",
-                top: "30px",
-                right: "40px",
-                background: "none",
-                border: "none",
-                color: "#fff",
-                fontSize: "35px",
-                cursor: "pointer",
-                fontFamily: "monospace",
-                opacity: 0.7
-              }}
+               style={{
+                 position: "absolute",
+                 top: "20px",
+                 right: "20px",
+                 width: "44px",
+                 height: "44px",
+                 display: "grid",
+                 placeItems: "center",
+                 background: "rgba(15, 15, 15, 0.9)",
+                 border: "1px solid rgba(227, 196, 130, 0.8)",
+                 color: "#fff",
+                 fontSize: "28px",
+                 lineHeight: 1,
+                 cursor: "pointer",
+                 fontFamily: "monospace",
+                 opacity: 1,
+                 borderRadius: "50%"
+               }}
             >
               &times;
             </button>
@@ -279,7 +330,7 @@ function App() {
               <span style={{ color: "#d9b66f", fontSize: "11px", letterSpacing: "3px", display: "block", marginBottom: "5px" }}>
                 {selectedImg.cat}
               </span>
-              <h3 style={{ color: "#fff", fontSize: "22px", letterSpacing: "1px" }}>
+              <h3 id="gallery-modal-title" style={{ color: "#fff", fontSize: "22px", letterSpacing: "1px" }}>
                 {selectedImg.title}
               </h3>
             </div>

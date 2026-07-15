@@ -1,9 +1,10 @@
 const fallbackPhoto = "https://i.pinimg.com/736x/1c/65/35/1c6535e7f3f22e308427055cca5ed790.jpg";
 
-export default function SidebarProfile({ member }) {
+export default function SidebarProfile({ member, open = false, onClose }) {
   if (!member) {
     return (
-      <aside className="profile-sidebar profile-sidebar--empty">
+      <aside id="family-profile" className={`profile-sidebar profile-sidebar--empty${open ? " is-open" : ""}`}>
+        {onClose && <button type="button" className="profile-close" onClick={onClose} aria-label="Close profile">×</button>}
         <img className="profile-photo" src={fallbackPhoto} alt="Select a family member" />
         <h2>Select Member</h2>
         <dl className="profile-details">
@@ -19,7 +20,8 @@ export default function SidebarProfile({ member }) {
 
   const fullName = `${member.first_name || ""} ${member.last_name || ""}`.trim();
   return (
-    <aside className="profile-sidebar">
+    <aside id="family-profile" className={`profile-sidebar${open ? " is-open" : ""}`}>
+      {onClose && <button type="button" className="profile-close" onClick={onClose} aria-label="Close profile">×</button>}
       <span className="eyebrow">Member profile</span>
       <img className="profile-photo" src={member.photo || fallbackPhoto} alt={fullName} />
       <h2>{fullName}</h2>
